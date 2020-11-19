@@ -1,0 +1,10 @@
+{
+  "appid": "4bf4a5c01a8d436aa254526f318850d2",
+  "name": "NetgearModem",
+  "website": "https://www.netgear.com/home/products/networking/cable-modems-routers/CM1000.aspx",
+  "license": "Proprietary ",
+  "description": "",
+  "enhanced": true,
+  "tile_background": "dark",
+  "icon": "netgearmodem.png"
+}
