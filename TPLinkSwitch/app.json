@@ -1,0 +1,10 @@
+{
+    "appid": "d3b7031c8c8a42279c3bd920e8b8e2de",
+    "name": "TP-Link Switch",
+    "website": "https://www.tp-link.com/us/business-networking/easy-smart-switch/tl-sg1024de/",
+    "license": "Proprietary",
+    "description": "24-Port Gigabit Easy Smart Switch. Web-based user interface and management utility simplify configuration. Provides network monitoring, traffic prioritization and VLAN features",
+    "enhanced": false,
+    "tile_background": "dark",
+    "icon": "tplinkswitch.png"
+}
