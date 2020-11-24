@@ -3,15 +3,32 @@
 class NetgearModem extends \App\SupportedApps implements \App\EnhancedApps {
 
     public $config;
-    // protected $login_first = true; // Uncomment if api requests need to be authed first
+    protected $login_first = true; // Uncomment if api requests need to be authed first
     // protected $method = 'POST';  // Uncomment if requests to the API should be set by POST
 
     function __construct() {
         $this->jar = new \GuzzleHttp\Cookie\CookieJar;
     }
+
+
+    public function login() {
+
+    }
+
     public function test()
     {
-        $test = parent::appTest($this->url('GenieLogin.asp'));
+        $username = urlencode($this->config->username);
+        $password = urlencode($this->config->password);
+        $auth_token = base64_encode($username.":".$password);
+        
+        $attrs = [
+            'cookies' => $this->jar,
+            'headers' => [
+                "Authorization" => "Basic ".$auth_token
+            ]
+        ];
+        $res = parent::execute($this->url(''), $attrs, false, 'GET');
+        $test = parent::appTest($this->url(''), $attrs);
         echo $test->status;
     }
    
@@ -20,94 +37,90 @@ class NetgearModem extends \App\SupportedApps implements \App\EnhancedApps {
         $status = 'inactive';
         $username = urlencode($this->config->username);
         $password = urlencode($this->config->password);
-        $webtoken = urlencode($this->config->webtoken);
+        $auth_token = base64_encode($username.":".$password);
         $data = [];
-        // get web token
 
-        $res = parent::execute($this->url('GenieLogin.asp'));
+
+        $attrs = [
+            'cookies' => $this->jar,
+            'headers' => [
+                "Authorization" => "Basic " . $auth_token
+            ]
+        ];
+        $res = parent::execute($this->url(''), $attrs, false, 'GET');
+
+        $res = parent::execute($this->url('DocsisStatus.htm'), $attrs, false, 'GET');
         $body = $res->getBody();
-        // <input type="hidden" name="webToken" value=xxxxxxxxx />
 
-        $pattern = '/<input\\s+type="hidden"\\s+name="webToken"\\s+value=(\\d{1,})\\s+\\/>/i';
-        //echo $body;
+        $pattern = '/function\s(InitTagValue|InitUsTableTagValue|InitDsTableTagValue)\(\)\s*\{.*?tagValueList\s*=\s*\'([^\']*)\'/is';
+        
+        
         preg_match_all($pattern, $body, $matches, PREG_SET_ORDER, 0);
-        if (count($matches) > 0) {
-            $webtoken = $matches[0][1]; //'1605723972';
-            $attrs = [
-                'body' => 'loginUsername='.$username.'&loginPassword='.$password.'&webToken='.$webtoken,
-                'cookies' => $this->jar,
-                'headers' => ['content-type' => 'application/x-www-form-urlencoded']
-            ];
-            $res = parent::execute($this->url('goform/GenieLogin'), $attrs, false, 'POST');
-            $attrs = [
-                'cookies' => $this->jar,
-            ];
-            $body = $res->getBody();
-            // echo $body;
-            $res = parent::execute($this->url('DocsisStatus.asp'), $attrs, false, 'GET');
-            $body = $res->getBody();
-            //echo $body;
-            /*
-                <td class="style1">Connectivity State</td>
-                <td>OK</td>
-                <td>Operational</td>
-            */
+        $match_count = count($matches);
+        $status = $match_count > 0 ? "active" : "inactive";
+            
+        for ($i = 0; $i < $match_count; $i++) {
+            $match = $matches[$i];
+            $tagList = explode("|", $match[2]);
+            $action = strtoupper($match[1]);
+            $correctable = 0;
+            $uncorrectable = 0;
+            switch ($action) {
+                case "INITTAGVALUE": // connectivity status
+                    $data['connectivity_state'] = $tagList[2];
+                break;
+                case "INITDSTABLETAGVALUE": // downstream data
+                    // 32|1|Locked|QAM256|42|399000000 Hz|11.8|38.9|232112|24980
+                    // Channel (text) | Lock Status (text) | Modulation (text) | Channel ID (text) | Frequency (text) | Power (text) | SNR (text) | Correctables (text) | Uncorrectables (text)
+                    $correctable += intval($tagList[8]);
+                    $uncorrectable += intval($tagList[9]);
+                break;
+                case "INITUSTABLETAGVALUE": // upstream data
+                break;
+                default:
 
-            $pattern = '/<td\\sclass="style1">Connectivity State<\/td>\\s*<td>(.*?)<\/td>/mi';
-            preg_match_all($pattern, $body, $matches, PREG_SET_ORDER, 0);
-            if (count($matches) > 0) {
-                $data['connectivity_state'] = $matches[0][1];
-                $status = "active";
-            } else {
-                $data['connectivity_state'] = "???";
-                $status = "active";
+                break;
             }
-
-            // $pattern = '/<tr>(<td>.*?<\/td>){9}<td>(\\d+)<\/td><\/tr>/mi';
-            // preg_match_all($pattern, $body, $matches, PREG_SET_ORDER, 0);
-            // $match_count = count($matches);
-            // $uncorrectable = 0;
-            // for ($i = 0; $i < $match_count; $i++) {
-            //     $uncorrectable += intval($matches[$i][1]);
-            //     $status = "active";
-            // }
-            // $data['uncorrectable_codewords'] = number_format($uncorrectable);
         }
 
+        $data['uncorrectable_codewords'] = $this->short_number_format($uncorrectable, 2);
+        $data['correctable_codewords'] = $this->short_number_format($correctable, 2);
 
 
-        // $attrs = [
-        //     'body' => 'loginUsername='.$username.'&loginPassword='.$password.'&webToken='.$webtoken,
-        //     'cookies' => $this->jar,
-        //     'headers' => ['content-type' => 'application/x-www-form-urlencoded']
-        // ];
-        // $res = parent::execute($this->url('goform/GenieLogin'), $attrs, false, 'POST');
-        // $attrs = [
-        //     'cookies' => $this->jar,
-        // ];
-        // $body = $res->getBody();
-        // // echo $body;
-        // $res = parent::execute($this->url('DocsisStatus.asp'), $attrs, false, 'GET');
-        // $body = $res->getBody();
-        // //echo $body;
-        // /*
-        //     <td class="style1">Connectivity State</td>
-        //     <td>OK</td>
-        //     <td>Operational</td>
-        // */
-
-        // $pattern = '/<td\\sclass="style1">Connectivity State<\/td>\\s*<td>(.*?)<\/td>/mi';
-        // preg_match_all($pattern, $body, $matches, PREG_SET_ORDER, 0);
-        // if (count($matches) > 0) {
-        //     $data['connectivity_state'] = $matches[0][1];
-        //     $status = "active";
-        // } else {
-        //     $data['connectivity_state'] = "???";
-        //     $status = "active";
-        // }
+            // $pattern = '/<tr>(?:<td>.*?<\/td>){7}<td>(\\d+)<\/td><td>(\\d+)<\/td><td>(\\d+)<\/td><\/tr>/mi';
+            // preg_match_all($pattern, $body, $matches, PREG_SET_ORDER, 0);
+            // $match_count = count($matches) - 2; # 2 are for downstream OFDM
+            // $uncorrectable = 0;
+            // $unerrored = 0;
+            // $correctable = 0;
+            // for ($i = 0; $i < $match_count; $i++) {
+            //     $unerrored += intval($matches[$i][1]);
+            //     $correctable += intval($matches[$i][2]);
+            //     $uncorrectable += intval($matches[$i][3]);
+            //     $status = "active";
+            // }
+            // $data['uncorrectable_codewords'] = $this->short_number_format($uncorrectable, 2);
+            // $data['correctable_codewords'] = $this->short_number_format($correctable, 2);
+            // $data['unerrored_codewords'] = $this->short_number_format($unerrored, 2);
 
         return parent::getLiveStats($status, $data);
         
+    }
+
+    public function short_number_format($n, $p) {
+        if ($n < 100 ) {
+            $n_format = number_format($n);
+        } else if ($n < 1000000) {
+            // Anything less than a million
+            $n_format = number_format($n / 1000, $p) . 'K';
+        } else if ($n < 1000000000) {
+            // Anything less than a billion
+            $n_format = number_format($n / 1000000, $p) . 'M';
+        } else {
+            // At least a billion
+            $n_format = number_format($n / 1000000000, $p) . 'B';
+        }
+        return $n_format;
     }
 
     public function url($endpoint)
